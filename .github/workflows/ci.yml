@@ -1,0 +1,53 @@
+name: MLflow CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Mengizinkan eksekusi manual
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12.7'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas scikit-learn mlflow==2.19.0
+
+      - name: Run MLflow Project (Training Model)
+        run: |
+          cd MLProject
+          # Menjalankan MLproject dengan env-manager=local agar lebih stabil di CI/CD
+          mlflow run . --env-manager=local
+
+      - name: Upload Model Artifact to GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model-artifact
+          path: MLProject/model_output/
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build Docker Image using MLflow
+        run: |
+          cd MLProject
+          # Membangun image menggunakan fungsi bawaan MLflow sesuai kriteria Advance
+          mlflow models build-docker -m model_output -n ${{ secrets.DOCKER_USERNAME }}/sml-model:latest
+
+      - name: Push Docker Image to Docker Hub
+        run: |
+          docker push ${{ secrets.DOCKER_USERNAME }}/sml-model:latest
